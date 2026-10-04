@@ -50,7 +50,8 @@ pnpm dev:web              # vite dev server for web UI only
 - `vite` + `react` + `tailwindcss` — Web UI
 - `ws` — WebSocket server
 - `@modelcontextprotocol/sdk` — MCP server framework
-- `react-diff-view` + `refractor` — Syntax-highlighted diffs
+- `@pierre/diffs` + `@pierre/trees` — Diffshub display components
+- `react-diff-view` — Bounded worker-page parsing only
 
 To test the CLI locally after building:
 

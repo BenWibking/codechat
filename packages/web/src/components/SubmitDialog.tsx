@@ -1,3 +1,4 @@
+import { Button } from './Button';
 import { useState } from 'react';
 import { useReview } from '../context/ReviewContext';
 
@@ -67,7 +68,7 @@ export function SubmitDialog({ onClose }: SubmitDialogProps) {
             onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-info)')}
             onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-default)')}
           />
-          <button
+          <Button variant="outline" size="xs"
             onClick={submit}
             className="flex w-full items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium"
             style={{ backgroundColor: 'var(--color-btn-green-bg)', color: 'var(--color-text-on-emphasis)', border: '1px solid var(--color-btn-border)' }}
@@ -78,10 +79,10 @@ export function SubmitDialog({ onClose }: SubmitDialogProps) {
               <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z" />
             </svg>
             Submit review
-          </button>
+          </Button>
         </div>
         <div className="px-4 py-3" style={{ borderTop: '1px solid var(--color-border-separator)' }}>
-          <button
+          <Button variant="outline" size="xs"
             onClick={onClose}
             className="w-full rounded-md px-4 py-1.5 text-sm font-medium"
             style={{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border-default)' }}
@@ -89,7 +90,7 @@ export function SubmitDialog({ onClose }: SubmitDialogProps) {
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     </div>

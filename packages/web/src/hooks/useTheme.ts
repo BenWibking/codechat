@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useSyncExternalStore, useEffect, useCallback } from 'react';
 
 type Theme = 'light' | 'dark';
 type ThemePreference = Theme | 'system';
@@ -25,37 +25,31 @@ function applyTheme(preference: ThemePreference): void {
   }
 }
 
+function getTheme(): Theme {
+  const preference = getStoredPreference();
+  return preference === 'system' ? getSystemTheme() : preference;
+}
+
+function subscribe(listener: () => void) {
+  const media = window.matchMedia(MEDIA_QUERY);
+  window.addEventListener('codechat-theme-change', listener);
+  window.addEventListener('storage', listener);
+  media.addEventListener('change', listener);
+  return () => {
+    window.removeEventListener('codechat-theme-change', listener);
+    window.removeEventListener('storage', listener);
+    media.removeEventListener('change', listener);
+  };
+}
+
 export function useTheme() {
-  const [preference, setPreference] = useState<ThemePreference>(getStoredPreference);
-  const [effectiveTheme, setEffectiveTheme] = useState<Theme>(
-    () => (preference === 'system' ? getSystemTheme() : preference),
-  );
-
-  // Apply the data-theme attribute whenever preference changes
-  useEffect(() => {
-    applyTheme(preference);
-    setEffectiveTheme(preference === 'system' ? getSystemTheme() : preference);
-  }, [preference]);
-
-  // Listen for OS-level theme changes when preference is 'system'
-  useEffect(() => {
-    if (preference !== 'system') return;
-    const mq = window.matchMedia(MEDIA_QUERY);
-    const handler = (e: MediaQueryListEvent) => {
-      setEffectiveTheme(e.matches ? 'dark' : 'light');
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [preference]);
-
+  const theme = useSyncExternalStore(subscribe, getTheme);
+  useEffect(() => applyTheme(getStoredPreference()), [theme]);
   const toggleTheme = useCallback(() => {
-    setPreference((prev) => {
-      const current = prev === 'system' ? getSystemTheme() : prev;
-      const next: Theme = current === 'dark' ? 'light' : 'dark';
-      localStorage.setItem(STORAGE_KEY, next);
-      return next;
-    });
+    const next = getTheme() === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(STORAGE_KEY, next);
+    applyTheme(next);
+    window.dispatchEvent(new Event('codechat-theme-change'));
   }, []);
-
-  return { theme: effectiveTheme, toggleTheme };
+  return { theme, toggleTheme };
 }

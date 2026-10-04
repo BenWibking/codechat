@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { changeToLineInfo, getChangeKeysInRange } from '../utils/changeKeyMapping';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,7 +28,7 @@ export function useGutterDrag({ hunks, onSelect }: UseGutterDragOptions) {
   onSelectRef.current = onSelect;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMouseDown = useCallback((arg: any, event: MouseEvent) => {
+  const onMouseDown = useCallback((arg: any, event: ReactMouseEvent) => {
     const change = arg.change ?? arg;
     if (!change) return;
     event.preventDefault(); // suppress text selection

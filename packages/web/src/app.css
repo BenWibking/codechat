@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "./styles/diff-overrides.css";
+
 
 /* ── Theme tokens ─────────────────────────────────────── */
 
@@ -239,4 +239,109 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-scrollbar-thumb-hover);
+}
+
+/* File/page controls remain keyboard accessible and make disabled boundaries visible. */
+.review-controls button:not(.diff-gutter button) {
+  border-radius: 4px;
+}
+.review-controls button:disabled { opacity: .4; cursor: default; }
+.review-controls button:focus-visible, .review-controls a:focus-visible {
+  outline: 2px solid var(--color-link); outline-offset: 2px;
+}
+.review-controls input {
+  color: var(--color-text-primary); background: var(--color-surface-bg);
+  border: 1px solid var(--color-border-default);
+}
+.review-controls a { color: var(--color-link); }
+
+.review-toolbar button, .review-toolbar a {
+  padding: 4px 10px; border: 1px solid var(--color-border-default);
+  border-radius: 5px; font-size: 12px; background: var(--color-surface-bg);
+}
+.review-toolbar button[aria-pressed="true"] { background: var(--color-elevated-bg); }
+.review-toolbar button:not(:disabled):hover { background: var(--color-elevated-bg); }
+
+/* Diffshub chrome: compact, neutral surfaces around Pierre's shadow DOM components. */
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --color-page-bg: #141414;
+  --color-deep-bg: #191919;
+  --color-surface-bg: #202020;
+  --color-elevated-bg: #292929;
+  --color-border-default: #353535;
+  --color-border-separator: #2b2b2b;
+  --color-text-primary: #eee;
+  --color-text-secondary: #aaa;
+  --color-text-muted: #999;
+  --color-btn-green-bg: #eee;
+  --color-btn-green-hover: #ccc;
+  --color-text-on-emphasis: #141414;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-page-bg: #fff;
+    --color-deep-bg: #fafafa;
+    --color-surface-bg: #f5f5f5;
+    --color-elevated-bg: #eee;
+    --color-border-default: #ddd;
+    --color-border-separator: #e5e5e5;
+    --color-text-primary: #202020;
+    --color-text-secondary: #666;
+    --color-text-muted: #737373;
+    --color-btn-green-bg: #202020;
+    --color-btn-green-hover: #404040;
+    --color-text-on-emphasis: #fff;
+  }
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --color-page-bg: #fff;
+  --color-deep-bg: #fafafa;
+  --color-surface-bg: #f5f5f5;
+  --color-elevated-bg: #eee;
+  --color-border-default: #ddd;
+  --color-border-separator: #e5e5e5;
+  --color-text-primary: #202020;
+  --color-text-secondary: #666;
+  --color-text-muted: #737373;
+  --color-btn-green-bg: #202020;
+  --color-btn-green-hover: #404040;
+  --color-text-on-emphasis: #fff;
+}
+.review-header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--color-border-default); background: var(--color-deep-bg); font-size: 12px; }
+.repo-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.review-description { padding: 8px 16px; font-size: 12px; border-bottom: 1px solid var(--color-border-default); }
+.connection-status { color: var(--color-text-secondary); }
+.primary-button { background: var(--color-btn-green-bg) !important; color: var(--color-text-on-emphasis) !important; }
+.file-sidebar { background: var(--color-deep-bg); border-right: 1px solid var(--color-border-default); }
+.sidebar-heading, .sidebar-footer { padding: 12px; font-size: 12px; color: var(--color-text-secondary); }
+.sidebar-heading { display: flex; justify-content: space-between; border-bottom: 1px solid var(--color-border-default); }
+.sidebar-footer { border-top: 1px solid var(--color-border-default); }
+.file-heading { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-block: 1px solid var(--color-border-default); font-size: 12px; }
+.added { color: var(--color-success); }
+.deleted { color: var(--color-danger); }
+.review-toolbar { font-size: 12px; }
+.pierre-code-view { flex: 1; min-height: 0; overflow: auto; }
+.review-annotation { font-family: system-ui, sans-serif; font-size: 14px; color: var(--color-text-primary); }
+.annotation-card { display: flex; gap: 10px; max-width: 600px; margin: 8px; padding: 12px; border: 1px solid var(--color-border-default); border-radius: 12px; background: var(--color-page-bg); box-shadow: 0 2px 4px #00000006, 0 4px 8px #00000006; }
+.comment-avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--color-elevated-bg); flex-shrink: 0; }
+.comment-thread { padding-bottom: 12px; overflow-wrap: anywhere; }
+.comment-thread small { color: var(--color-text-muted); }
+.agent-reply { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--color-border-default); }
+.review-controls textarea { width: 100%; }
+@media (max-width: 700px) { .review-header { flex-wrap: wrap; } .connection-status { display: none; } .file-sidebar { max-width: 35vw; } .file-heading { gap: 6px; } }
+
+@theme inline {
+  --color-primary: var(--color-text-primary);
+  --color-primary-foreground: var(--color-page-bg);
+  --color-background: var(--color-page-bg);
+  --color-secondary: var(--color-surface-bg);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-accent: var(--color-elevated-bg);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-ring: var(--color-link);
+  --color-input: var(--color-border-default);
+  --color-destructive: var(--color-danger);
 }

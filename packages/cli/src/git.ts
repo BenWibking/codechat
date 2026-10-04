@@ -34,14 +34,18 @@ async function getUntrackedFiles(cwd: string): Promise<string[]> {
   const { stdout } = await exec(
     'git',
     ['ls-files', '--others', '--exclude-standard'],
-    { cwd },
+    { cwd, maxBuffer: 128 * 1024 * 1024 },
   );
   return stdout.trim().split('\n').filter(Boolean);
 }
 
 async function generateUntrackedDiff(cwd: string, filePath: string): Promise<string> {
   try {
-    const content = await readFile(join(cwd, filePath), 'utf-8');
+    const bytes = await readFile(join(cwd, filePath));
+    if (bytes.includes(0)) {
+      return `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\nBinary files /dev/null and b/${filePath} differ\n`;
+    }
+    const content = bytes.toString('utf-8');
     const lines = content.split('\n');
     // Remove trailing empty line from split if file ends with newline
     if (lines.length > 0 && lines[lines.length - 1] === '') {
@@ -66,18 +70,22 @@ export async function getDiff(cwd: string): Promise<string> {
   let trackedDiff = '';
 
   if (await hasCommits(cwd)) {
-    const { stdout } = await exec('git', ['diff', 'HEAD'], { cwd, maxBuffer: 10 * 1024 * 1024 });
+    const { stdout } = await exec('git', ['diff', 'HEAD'], { cwd, maxBuffer: 128 * 1024 * 1024 });
     trackedDiff = stdout;
   } else {
-    const { stdout } = await exec('git', ['diff', '--cached'], { cwd, maxBuffer: 10 * 1024 * 1024 });
+    const { stdout } = await exec('git', ['diff', '--cached'], { cwd, maxBuffer: 128 * 1024 * 1024 });
     trackedDiff = stdout;
   }
 
   // Also include untracked files
   const untrackedFiles = await getUntrackedFiles(cwd);
-  const untrackedDiffs = await Promise.all(
-    untrackedFiles.map((f) => generateUntrackedDiff(cwd, f)),
-  );
+  // Bound open files and temporary allocations rather than reading the entire tree concurrently.
+  const untrackedDiffs: string[] = [];
+  for (let i = 0; i < untrackedFiles.length; i += 8) {
+    untrackedDiffs.push(...await Promise.all(
+      untrackedFiles.slice(i, i + 8).map((f) => generateUntrackedDiff(cwd, f)),
+    ));
+  }
 
   const parts = [trackedDiff, ...untrackedDiffs].filter(Boolean);
   return parts.join('\n');

@@ -9,12 +9,14 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { z } from 'zod';
 import type {
   Session,
+  SessionPreview,
   Comment,
   ReviewResult,
   ReviewServer,
   ServerMessage,
 } from './types.js';
 import { getDiff, parseFileSummaries } from './git.js';
+import { indexDiff } from './diff-index.js';
 import { saveSession } from './session.js';
 
 const execAsync = promisify(execFile);
@@ -130,8 +132,10 @@ interface ServerOptions {
   timeout?: number;
 }
 
+const MAX_CONTEXT_BYTES = 1024 * 1024;
+
 const DEFAULT_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-// Grace period after all browser tabs close before auto-submitting the review
+// Grace period for refresh/reconnect; interruptions preserve a pending review.
 const DISCONNECT_GRACE = 5_000;
 
 export async function startReviewServer(options: ServerOptions): Promise<ReviewServer> {
@@ -147,9 +151,31 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
     let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
     let fileWatcher: FSWatcher | null = null;
+    let refreshGeneration = 0;
     let watchDebounce: ReturnType<typeof setTimeout> | null = null;
 
+    let revision = randomUUID();
+    let diffIndex = indexDiff(session.diff, session.files);
+    function preview(): SessionPreview {
+      const { diff, ...metadata } = session;
+      return { ...metadata, revision, diffBytes: Buffer.byteLength(diff) };
+    }
     const httpServer = createServer(async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      if (url.pathname === '/api/file-diff') {
+        const entry = diffIndex.get(url.searchParams.get('path') ?? '');
+        if (url.searchParams.get('revision') !== revision) {
+          res.writeHead(409); res.end('The diff changed. Reload the file.'); return;
+        }
+        if (!entry) { res.writeHead(404); res.end('File not in this review'); return; }
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+          ...(url.searchParams.has('download') ? { 'Content-Disposition': 'attachment; filename="file.diff"' } : {}),
+        });
+        res.end(session.diff.slice(entry.start, entry.end));
+        return;
+      }
       await serveStatic(webDistPath, req, res);
     });
 
@@ -157,16 +183,16 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
 
     let reviewSummary: string | undefined;
 
-    async function doSubmit(): Promise<void> {
+    async function doSubmit(interrupted = false): Promise<void> {
       if (submitted) return;
       submitted = true;
 
       const pendingComments = session.comments.filter((c) => !c.resolved);
-      const status = pendingComments.length > 0 ? 'changes_requested' : 'approved';
+      const status = interrupted ? 'pending' : pendingComments.length > 0 ? 'changes_requested' : 'approved';
       session.status = status;
       await saveSession(session);
 
-      broadcast(wss, { type: 'review_complete' });
+      broadcast(wss, { type: 'review_complete', data: { status } });
 
       const result: ReviewResult = {
         sessionId: session.id,
@@ -199,14 +225,14 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
         disconnectTimer = null;
       }
 
-      send(ws, { type: 'init', data: session });
+      send(ws, { type: 'init', data: preview() });
 
       ws.on('close', () => {
         if (submitted) return;
         const activeClients = [...wss.clients].filter((c) => c.readyState === c.OPEN);
         if (activeClients.length === 0) {
           disconnectTimer = setTimeout(() => {
-            doSubmit().catch((err) => process.stderr.write(`Submit error: ${err}\n`));
+            doSubmit(true).catch((err) => process.stderr.write(`Submit error: ${err}\n`));
           }, DISCONNECT_GRACE);
         }
       });
@@ -274,6 +300,8 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
 
           case 'request_file_content': {
             const { filePath } = msg.data;
+            const file = session.files.find((item) => item.path === filePath);
+            if (!file) break;
             // Prevent directory traversal
             if (filePath.includes('..') || filePath.startsWith('/')) break;
 
@@ -283,8 +311,8 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
             // Get the old version from HEAD
             try {
               const { stdout } = await execAsync(
-                'git', ['show', `HEAD:${filePath}`],
-                { cwd: session.repoPath, maxBuffer: 10 * 1024 * 1024 },
+                'git', ['show', `HEAD:${file.oldPath ?? filePath}`],
+                { cwd: session.repoPath, maxBuffer: MAX_CONTEXT_BYTES },
               );
               oldContent = stdout;
             } catch {
@@ -293,12 +321,18 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
 
             // Get the new version from the working tree
             try {
-              newContent = await readFile(join(session.repoPath, filePath), 'utf-8');
+              const path = join(session.repoPath, filePath);
+              if ((await stat(path)).size <= MAX_CONTEXT_BYTES) {
+                const content = await readFile(path);
+                if (content.length <= MAX_CONTEXT_BYTES) newContent = content.toString('utf-8');
+              }
             } catch {
               // File may have been deleted
             }
 
-            send(ws, { type: 'file_content', data: { filePath, oldContent, newContent } });
+            send(ws, { type: 'file_content', data: { filePath, oldContent, newContent,
+              ...((file.status !== 'added' ? oldContent === null : newContent === null) ? { error: 'Context unavailable or too large. Use the raw diff download.' } : {}),
+            } });
             break;
           }
         }
@@ -311,7 +345,7 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
 
       // Start the overall timeout
       timeoutTimer = setTimeout(() => {
-        doSubmit().catch((err) => process.stderr.write(`Submit error: ${err}\n`));
+        doSubmit(true).catch((err) => process.stderr.write(`Submit error: ${err}\n`));
       }, timeout);
 
       // Watch for file changes and update diff live
@@ -319,15 +353,20 @@ export async function startReviewServer(options: ServerOptions): Promise<ReviewS
         fileWatcher = watch(session.repoPath, { recursive: true }, (_event, filename) => {
           if (submitted) return;
           if (typeof filename === 'string' && (filename === '.git' || filename.startsWith('.git/') || filename.includes('/node_modules/') || filename.startsWith('node_modules/'))) return;
+          const generation = ++refreshGeneration;
           if (watchDebounce) clearTimeout(watchDebounce);
           watchDebounce = setTimeout(async () => {
             try {
               const newDiff = await getDiff(session.repoPath);
-              if (newDiff === session.diff) return;
+              if (generation !== refreshGeneration || submitted || newDiff === session.diff) return;
               const newFiles = parseFileSummaries(newDiff);
+              const newIndex = indexDiff(newDiff, newFiles);
+              if (submitted) return;
               session.diff = newDiff;
+              diffIndex = newIndex;
+              revision = randomUUID();
               session.files = newFiles;
-              broadcast(wss, { type: 'diff_updated', data: { diff: newDiff, files: newFiles } });
+              broadcast(wss, { type: 'diff_updated', data: { revision, diffBytes: Buffer.byteLength(newDiff), files: newFiles } });
             } catch {
               // getDiff may fail transiently (e.g. mid-write); ignore and retry on next event
             }

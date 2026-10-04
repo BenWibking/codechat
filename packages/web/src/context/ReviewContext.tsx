@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, type ReactNode } from 'react';
-import type { Session, Comment, FileSummary, ClientMessage, ServerMessage } from '../types';
+import type { SessionPreview, Comment, FileSummary, ClientMessage, ServerMessage } from '../types';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 export interface CommentDraft {
@@ -13,10 +13,11 @@ export interface CommentDraft {
 export interface FileContent {
   oldContent: string | null;
   newContent: string | null;
+  error?: string;
 }
 
 interface ReviewState {
-  session: Session | null;
+  session: SessionPreview | null;
   isConnected: boolean;
   isSubmitted: boolean;
   activeDraft: CommentDraft | null;
@@ -24,13 +25,13 @@ interface ReviewState {
 }
 
 type ReviewAction =
-  | { type: 'INIT'; session: Session }
+  | { type: 'INIT'; session: SessionPreview }
   | { type: 'COMMENT_ADDED'; comment: Comment }
   | { type: 'COMMENT_EDITED'; id: string; body: string }
   | { type: 'COMMENT_DELETED'; id: string }
-  | { type: 'DIFF_UPDATED'; diff: string; files: FileSummary[] }
-  | { type: 'FILE_CONTENT'; filePath: string; oldContent: string | null; newContent: string | null }
-  | { type: 'REVIEW_COMPLETE' }
+  | { type: 'DIFF_UPDATED'; revision: string; diffBytes: number; files: FileSummary[] }
+  | { type: 'FILE_CONTENT'; filePath: string; oldContent: string | null; newContent: string | null; error?: string }
+  | { type: 'REVIEW_COMPLETE'; status: SessionPreview['status'] }
   | { type: 'CONNECTION_STATUS'; connected: boolean }
   | { type: 'START_DRAFT'; filePath: string; line: number; side: 'old' | 'new'; endLine?: number }
   | { type: 'UPDATE_DRAFT'; body: string }
@@ -86,7 +87,8 @@ function reviewReducer(state: ReviewState, action: ReviewAction): ReviewState {
         fileContents: {},
         session: {
           ...state.session,
-          diff: action.diff,
+          revision: action.revision,
+          diffBytes: action.diffBytes,
           files: action.files,
         },
       };
@@ -94,12 +96,11 @@ function reviewReducer(state: ReviewState, action: ReviewAction): ReviewState {
       return {
         ...state,
         fileContents: {
-          ...state.fileContents,
-          [action.filePath]: { oldContent: action.oldContent, newContent: action.newContent },
+          [action.filePath]: { oldContent: action.oldContent, newContent: action.newContent, error: action.error },
         },
       };
     case 'REVIEW_COMPLETE':
-      return { ...state, isSubmitted: true };
+      return { ...state, isSubmitted: true, session: state.session ? { ...state.session, status: action.status } : null };
     case 'CONNECTION_STATUS':
       return { ...state, isConnected: action.connected };
     case 'START_DRAFT':
@@ -155,14 +156,14 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'COMMENT_DELETED', id: msg.data.id });
         break;
       case 'diff_updated':
-        dispatch({ type: 'DIFF_UPDATED', diff: msg.data.diff, files: msg.data.files });
+        dispatch({ type: 'DIFF_UPDATED', revision: msg.data.revision, diffBytes: msg.data.diffBytes, files: msg.data.files });
         break;
       case 'file_content':
-        dispatch({ type: 'FILE_CONTENT', filePath: msg.data.filePath, oldContent: msg.data.oldContent, newContent: msg.data.newContent });
+        dispatch({ type: 'FILE_CONTENT', filePath: msg.data.filePath, oldContent: msg.data.oldContent, newContent: msg.data.newContent, error: msg.data.error });
         break;
       case 'review_complete':
-        dispatch({ type: 'REVIEW_COMPLETE' });
-        setTimeout(() => window.close(), 500);
+        dispatch({ type: 'REVIEW_COMPLETE', status: msg.data.status });
+        if (msg.data.status !== 'pending') setTimeout(() => window.close(), 500);
         break;
     }
   }, []);

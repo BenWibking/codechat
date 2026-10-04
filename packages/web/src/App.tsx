@@ -1,3 +1,4 @@
+import { Button } from './components/Button';
 import { useState, useCallback, useRef, Component, type ReactNode } from 'react';
 import { ReviewProvider, useReview } from './context/ReviewContext';
 import { ReviewHeader } from './components/ReviewHeader';
@@ -16,13 +17,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
           <div className="max-w-md text-center">
             <h1 className="mb-2 text-lg font-semibold">Something went wrong</h1>
             <p className="mb-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{this.state.error.message}</p>
-            <button
+            <Button variant="outline" size="xs"
               onClick={() => window.location.reload()}
               className="rounded-md px-4 py-2 text-sm font-medium"
               style={{ backgroundColor: 'var(--color-btn-green-bg)', color: 'var(--color-text-on-emphasis)', border: '1px solid var(--color-btn-border)' }}
             >
               Reload
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -41,8 +42,7 @@ function AppContent() {
 
   const handleSelectFile = useCallback((path: string) => {
     setActiveFile(path);
-    const el = document.getElementById(`file-${encodeURIComponent(path)}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   }, []);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -77,12 +77,12 @@ function AppContent() {
     <div className="flex h-screen flex-col" style={{ backgroundColor: 'var(--color-page-bg)', color: 'var(--color-text-primary)' }}>
       <ReviewHeader />
       <div className="flex flex-1 overflow-hidden">
-        <FileList activeFile={activeFile} onSelectFile={handleSelectFile} width={sidebarWidth} />
+        <FileList activeFile={state.session.files.some((file) => file.path === activeFile) ? activeFile : state.session.files[0]?.path ?? null} onSelectFile={handleSelectFile} width={sidebarWidth} />
         <div
           className="sidebar-resize-handle shrink-0"
           onMouseDown={handleResizeStart}
         />
-        <DiffView activeFile={activeFile} />
+        <DiffView activeFile={state.session.files.some((file) => file.path === activeFile) ? activeFile : state.session.files[0]?.path ?? null} onSelectFile={handleSelectFile} />
       </div>
     </div>
   );

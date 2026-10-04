@@ -1,3 +1,4 @@
+import { Button } from './Button';
 import { useRef, useEffect } from 'react';
 import { useReview } from '../context/ReviewContext';
 import { isLineRange } from '../types';
@@ -40,7 +41,7 @@ export function CommentForm({ filePath, line, endLine, side, onCancel }: Comment
 
   return (
     <div
-      className="my-2 rounded-md p-3"
+      className="annotation-card review-controls block"
       style={{ backgroundColor: 'var(--color-page-bg)', border: '1px solid var(--color-border-default)' }}
     >
       {isLineRange({ line, endLine }) && (
@@ -70,21 +71,21 @@ export function CommentForm({ filePath, line, endLine, side, onCancel }: Comment
         onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-default)')}
       />
       <div className="mt-2 flex items-center gap-2">
-        <button
+        <Button variant="outline" size="xs"
           onClick={handleSubmit}
           disabled={!body.trim()}
           className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40"
           style={{ backgroundColor: 'var(--color-btn-green-bg)', color: 'var(--color-text-on-emphasis)', border: '1px solid var(--color-btn-border)' }}
         >
           Add comment
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="xs"
           onClick={onCancel}
           className="rounded-md px-3 py-1.5 text-sm"
           style={{ color: 'var(--color-text-secondary)' }}
         >
           Cancel
-        </button>
+        </Button>
         <span className="ml-auto text-xs" style={{ color: 'var(--color-text-muted)' }}>
           {/(Mac|iPhone|iPad)/.test(navigator.userAgent) ? 'Cmd' : 'Ctrl'}+Enter to submit
         </span>

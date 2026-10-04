@@ -43,16 +43,19 @@ export interface ReviewServer {
   result: Promise<ReviewResult>;
 }
 
+// The full diff stays on the server; browsers receive only this lightweight snapshot.
+export type SessionPreview = Omit<Session, 'diff'> & { revision: string; diffBytes: number };
+
 // WebSocket protocol
 
 export type ServerMessage =
-  | { type: 'init'; data: Session }
+  | { type: 'init'; data: SessionPreview }
   | { type: 'comment_added'; data: Comment }
   | { type: 'comment_edited'; data: { id: string; body: string } }
   | { type: 'comment_deleted'; data: { id: string } }
-  | { type: 'diff_updated'; data: { diff: string; files: FileSummary[] } }
-  | { type: 'file_content'; data: { filePath: string; oldContent: string | null; newContent: string | null } }
-  | { type: 'review_complete' };
+  | { type: 'diff_updated'; data: { revision: string; diffBytes: number; files: FileSummary[] } }
+  | { type: 'file_content'; data: { filePath: string; oldContent: string | null; newContent: string | null; error?: string } }
+  | { type: 'review_complete'; data: { status: ReviewResult['status'] } };
 
 export type ClientMessage =
   | { type: 'add_comment'; data: Omit<Comment, 'id' | 'createdAt' | 'resolved'> }

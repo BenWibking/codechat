@@ -14,6 +14,8 @@ export async function startMcpServer(): Promise<void> {
     'codechat_review',
     `Open a browser UI for the user to review uncommitted changes and leave inline comments. Blocks until the user submits. Returns a ReviewResult JSON with { sessionId, status, comments }.
 
+A browser disconnect or timeout returns status "pending", never approval. Reopen the review to continue.
+
 Workflow:
 1. When the result comes back, summarize each unresolved comment (file, line, what the reviewer said) and state your plan for each. Skip already-resolved comments.
 2. Make the fixes.

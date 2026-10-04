@@ -7,6 +7,21 @@
     "build:cli": "pnpm --filter @codechat/cli build",
     "build:web": "pnpm --filter @codechat/web build",
     "dev:web": "pnpm --filter @codechat/web dev",
-    "dev": "pnpm --filter @codechat/cli --filter @codechat/web --parallel dev"
+    "dev": "pnpm --filter @codechat/cli --filter @codechat/web --parallel dev",
+    "test": "node packages/web/node_modules/vite/bin/vite.js build packages/web --logLevel error && TSX_TSCONFIG_PATH=packages/web/tsconfig.json node --import tsx --import ./packages/web/tests/register-css.mjs --test packages/cli/tests/*.test.ts packages/web/tests/*.test.tsx",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "benchmark": "tsx packages/web/tests/benchmark.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/jsdom": "^21.1.7",
+    "jsdom": "^26.1.0",
+    "tsx": "^4.23.15"
+  },
+  "pnpm": {
+    "overrides": {
+      "@pierre/trees>@pierre/theming": "1.0.1"
+    }
   }
 }
