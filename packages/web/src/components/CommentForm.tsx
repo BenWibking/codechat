@@ -2,16 +2,19 @@ import { Button } from './Button';
 import { useRef, useEffect } from 'react';
 import { useReview } from '../context/ReviewContext';
 import { isLineRange } from '../types';
+import { Avatar, rangeLabel } from './CommentWidget';
 
 interface CommentFormProps {
   filePath: string;
   line: number;
   endLine?: number;
   side: 'old' | 'new';
+  /** True when replying inside an existing thread. */
+  isReply?: boolean;
   onCancel: () => void;
 }
 
-export function CommentForm({ filePath, line, endLine, side, onCancel }: CommentFormProps) {
+export function CommentForm({ filePath, line, endLine, side, isReply, onCancel }: CommentFormProps) {
   const { state, send, updateDraft } = useReview();
   const body = state.activeDraft?.filePath === filePath ? (state.activeDraft.body ?? '') : '';
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -39,57 +42,33 @@ export function CommentForm({ filePath, line, endLine, side, onCancel }: Comment
     }
   }
 
+  const shortcut = /(Mac|iPhone|iPad)/.test(navigator.userAgent) ? '⌘' : 'Ctrl';
+
   return (
-    <div
-      className="annotation-card review-controls block"
-      style={{ backgroundColor: 'var(--color-page-bg)', border: '1px solid var(--color-border-default)' }}
-    >
-      {isLineRange({ line, endLine }) && (
-        <div
-          className="mb-2 text-xs font-medium"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          Lines {line}&ndash;{endLine}
+    <div className="gh-compose-row">
+      <Avatar kind="user" />
+      <form className="gh-compose" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+        {!isReply && isLineRange({ line, endLine }) && (
+          <div className="gh-compose-range">{rangeLabel({ line, endLine, side })}</div>
+        )}
+        <textarea
+          ref={textareaRef}
+          className="gh-textarea"
+          aria-label={isReply ? 'Reply' : 'Comment'}
+          value={body}
+          onChange={(e) => updateDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isReply ? 'Reply…' : 'Leave a comment'}
+          rows={4}
+        />
+        <div className="gh-compose-actions">
+          <span className="gh-compose-hint">{shortcut}+Enter to submit</span>
+          <Button variant="outline" size="sm" type="button" onClick={onCancel}>Cancel</Button>
+          <Button size="sm" type="submit" className="gh-btn-primary" disabled={!body.trim()}>
+            {isReply ? 'Reply' : 'Add comment'}
+          </Button>
         </div>
-      )}
-      <textarea
-        ref={textareaRef}
-        value={body}
-        onChange={(e) => updateDraft(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Leave a comment"
-        rows={3}
-        className="w-full resize-y rounded-md p-2 text-sm"
-        style={{
-          backgroundColor: 'var(--color-deep-bg)',
-          color: 'var(--color-text-primary)',
-          border: '1px solid var(--color-border-default)',
-          outline: 'none',
-          maxHeight: '192px',
-        }}
-        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-link)')}
-        onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-default)')}
-      />
-      <div className="mt-2 flex items-center gap-2">
-        <Button variant="outline" size="xs"
-          onClick={handleSubmit}
-          disabled={!body.trim()}
-          className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-          style={{ backgroundColor: 'var(--color-btn-green-bg)', color: 'var(--color-text-on-emphasis)', border: '1px solid var(--color-btn-border)' }}
-        >
-          Add comment
-        </Button>
-        <Button variant="outline" size="xs"
-          onClick={onCancel}
-          className="rounded-md px-3 py-1.5 text-sm"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          Cancel
-        </Button>
-        <span className="ml-auto text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          {/(Mac|iPhone|iPad)/.test(navigator.userAgent) ? 'Cmd' : 'Ctrl'}+Enter to submit
-        </span>
-      </div>
+      </form>
     </div>
   );
 }

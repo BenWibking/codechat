@@ -181,9 +181,11 @@ function FileDiffSection({ file, filePath, viewType, comments, showResolved, foc
         if (state.activeDraft) return;
         const comment = annotation.metadata.comments[0];
         startDraft(filePath, comment.line, comment.side, comment.endLine);
-      }} />
-      {annotation.metadata.draft && draft && <CommentForm filePath={filePath} line={draft.line}
-        endLine={draft.endLine} side={draft.side} onCancel={() => { discardDraft(); setSelection(null); }} />}
+      }}>
+        {annotation.metadata.draft && draft && <CommentForm filePath={filePath} line={draft.line}
+          endLine={draft.endLine} side={draft.side} isReply={annotation.metadata.comments.length > 0}
+          onCancel={() => { discardDraft(); setSelection(null); }} />}
+      </CommentWidget>
     </div>}
   />;
 }
