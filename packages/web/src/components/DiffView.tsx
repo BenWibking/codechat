@@ -8,7 +8,7 @@ import { CommentWidget } from './CommentWidget';
 import { CommentForm } from './CommentForm';
 import { FileHeader } from './FileHeader';
 import { toPierreDiff, hasLine } from '../utils/pierreDiff';
-import type { DiffPage } from '../utils/diffPages';
+import type { PreparedDiff } from '../utils/prepareDiff';
 import type { Comment } from '../types';
 
 interface DiffViewProps {
@@ -20,10 +20,11 @@ export function DiffView({ activeFile, onSelectFile }: DiffViewProps) {
   const { state } = useReview();
   const [viewType, setViewType] = useState<'unified' | 'split'>('unified');
   const [showResolved, setShowResolved] = useState(true);
-  const [loaded, setLoaded] = useState<{ key: string; data: DiffPage } | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; data: PreparedDiff } | null>(null);
   const [message, setMessage] = useState('Loading file…');
   const [error, setError] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [focus, setFocus] = useState<FocusTarget | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const summary = state.session?.files.find((file) => file.path === activeFile) ?? state.session?.files[0];
@@ -40,7 +41,7 @@ export function DiffView({ activeFile, onSelectFile }: DiffViewProps) {
     const worker = new Worker(new URL('../diff.worker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
     worker.onmessage = (event) => {
-      if (event.data.type === 'page') {
+      if (event.data.type === 'diff') {
         setLoaded({ key, data: event.data.data }); setError(false);
         scrollRef.current?.scrollTo({ top: 0 });
       } else {
@@ -48,14 +49,13 @@ export function DiffView({ activeFile, onSelectFile }: DiffViewProps) {
       }
     };
     worker.onerror = () => { setError(true); setMessage('Could not prepare this file. Retry or download its raw diff.'); };
-    worker.postMessage({ type: 'load', url, ...(state.activeDraft?.filePath === filePath ? { line: state.activeDraft.endLine ?? state.activeDraft.line, side: state.activeDraft.side } : {}) });
+    worker.postMessage({ url });
     return () => { worker.terminate(); workerRef.current = null; };
   }, [filePath, revision, key, url]);
 
   if (!state.session || !summary) return <div className="p-6">No changed files.</div>;
   const resolvedCount = comments.filter((comment) => comment.resolved).length;
   const fileIndex = state.session.files.findIndex((file) => file.path === filePath);
-  const requestPage = (page: number) => workerRef.current?.postMessage({ type: 'page', page });
 
   return (
     <div ref={scrollRef} className="review-controls flex flex-col flex-1 min-w-0 overflow-hidden" style={{ backgroundColor: 'var(--color-page-bg)' }}>
@@ -73,7 +73,7 @@ export function DiffView({ activeFile, onSelectFile }: DiffViewProps) {
         <details className="p-3">
           <summary>{comments.length} comments in this file</summary>
           {comments.map((comment) => <div key={comment.id} className="py-1">
-            <Button variant="outline" size="xs" disabled={!!state.activeDraft} onClick={() => workerRef.current?.postMessage({ type: 'page', line: comment.endLine ?? comment.line, side: comment.side })}>
+            <Button variant="outline" size="xs" disabled={!!state.activeDraft} onClick={() => setFocus({ line: comment.endLine ?? comment.line, side: comment.side, nonce: Date.now() })}>
               {comment.side} line {comment.line}{comment.endLine ? `–${comment.endLine}` : ''}: {comment.body}
             </Button>
           </div>)}
@@ -81,48 +81,32 @@ export function DiffView({ activeFile, onSelectFile }: DiffViewProps) {
       )}
       {!collapsed && (!data || error ? <div role={error ? 'alert' : 'status'} className="p-4">
         {message}
-        {error && <Button variant="outline" size="xs" className="ml-3" onClick={() => workerRef.current?.postMessage({ type: 'load', url })}>Retry</Button>}
+        {error && <Button variant="outline" size="xs" className="ml-3" onClick={() => workerRef.current?.postMessage({ url })}>Retry</Button>}
       </div> : <>
-        {data.pageCount > 1 && <div className="review-toolbar flex flex-wrap items-center gap-3 py-3">
-          <Button variant="outline" size="xs" disabled={data.page === 0 || !!state.activeDraft} onClick={() => requestPage(data.page - 1)}>Previous page</Button>
-          <form className="flex items-center gap-2" onSubmit={(event) => {
-            event.preventDefault();
-            const page = Number(new FormData(event.currentTarget).get('page')) - 1;
-            if (Number.isInteger(page) && page >= 0 && page < data.pageCount) requestPage(page);
-          }}>
-            <label>Page <input key={`${key}:${data.page}`} aria-label="Diff page" name="page" type="number"
-              min={1} max={data.pageCount} defaultValue={data.page + 1} className="w-20" disabled={!!state.activeDraft} />
-              {' '}of {data.pageCount} · {data.totalRows.toLocaleString()} diff lines</label>
-            <Button variant="outline" size="xs" disabled={!!state.activeDraft} type="submit">Go</Button>
-          </form>
-          <Button variant="outline" size="xs" disabled={data.page === data.pageCount - 1 || !!state.activeDraft} onClick={() => requestPage(data.page + 1)}>Next page</Button>
-        </div>}
         {data.file.hunks.length === 0 && <p className="p-4 text-sm">No textual changes to display. This file is empty, binary, or has only metadata changes.</p>}
         {data.omittedLines > 0 && <p role="status" className="py-3">{data.omittedLines} very long lines have preview placeholders. Download the raw diff for their complete content.</p>}
-        <FileDiffSection key={`${key}:${data.page}`} file={data.file} filePath={filePath!} viewType={viewType}
-          comments={comments} showResolved={showResolved} paged={data.pageCount > 1} />
-        {data.pageCount > 1 && <div className="review-toolbar flex items-center gap-3 py-4">
-          <Button variant="outline" size="xs" disabled={data.page === 0 || !!state.activeDraft} onClick={() => requestPage(data.page - 1)}>Previous page</Button>
-          <span>Page {data.page + 1} of {data.pageCount}</span>
-          <Button variant="outline" size="xs" disabled={data.page === data.pageCount - 1 || !!state.activeDraft} onClick={() => requestPage(data.page + 1)}>Next page</Button>
-        </div>}
+        <FileDiffSection key={key} file={data.file} filePath={filePath!} viewType={viewType}
+          comments={comments} showResolved={showResolved} focus={focus} cacheKey={key} />
       </>)}
     </div>
   );
 }
 
 interface FileDiffSectionProps {
-  file: DiffPage['file'];
+  file: PreparedDiff['file'];
   filePath: string;
   viewType: 'unified' | 'split';
   comments: Comment[];
   showResolved: boolean;
-  paged: boolean;
+  focus: FocusTarget | null;
+  cacheKey: string;
 }
+
+type FocusTarget = { line: number; side: 'old' | 'new'; nonce: number };
 
 type Annotation = { comments: Comment[]; draft: boolean };
 
-function FileDiffSection({ file, filePath, viewType, comments, showResolved }: FileDiffSectionProps) {
+function FileDiffSection({ file, filePath, viewType, comments, showResolved, focus, cacheKey }: FileDiffSectionProps) {
   const { state, startDraft, discardDraft } = useReview();
   const { theme } = useTheme();
   const draft = state.activeDraft?.filePath === filePath ? state.activeDraft : null;
@@ -130,7 +114,7 @@ function FileDiffSection({ file, filePath, viewType, comments, showResolved }: F
   const version = useRef(0);
   const viewer = useRef<CodeViewHandle<Annotation, undefined> | null>(null);
   const [selection, setSelection] = useState<CodeViewLineSelection | null>(null);
-  const fileDiff = useMemo(() => toPierreDiff(file, filePath), [file, filePath]);
+  const fileDiff = useMemo(() => toPierreDiff(file, filePath, cacheKey), [file, filePath, cacheKey]);
   const annotations = useMemo(() => {
     const groups = new Map<string, DiffLineAnnotation<Annotation>>();
     for (const comment of comments) {
@@ -161,6 +145,10 @@ function FileDiffSection({ file, filePath, viewType, comments, showResolved }: F
     if (annotation) viewer.current?.scrollTo({ type: 'line', id: filePath,
       lineNumber: annotation.lineNumber, side: annotation.side, align: 'center' });
   }, [items, filePath]);
+  useEffect(() => {
+    if (focus && hasLine(file, focus.side, focus.line)) viewer.current?.scrollTo({ type: 'line', id: filePath,
+      lineNumber: focus.line, side: focus.side === 'old' ? 'deletions' : 'additions', align: 'center' });
+  }, [focus]);
   const createDraft = (range: SelectedLineRange | null) => {
     if (!range || state.activeDraft) return;
     // CodeChat anchors ranges to one side; mixed-side selections cannot be submitted.
@@ -170,7 +158,7 @@ function FileDiffSection({ file, filePath, viewType, comments, showResolved }: F
     const end = Math.max(range.start, range.end);
     startDraft(filePath, line, side === 'deletions' ? 'old' : 'new', end === line ? undefined : end);
   };
-  // Recreate the bounded viewer when annotation slots change. Pierre 1.5.1 can
+  // Recreate the viewer when annotation slots change. Pierre 1.5.1 can
   // retain a stale virtual slot at the final line when a draft becomes a saved thread.
   return <CodeView<Annotation> key={items[0].version} ref={viewer}
     className="pierre-code-view"

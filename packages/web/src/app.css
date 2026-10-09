@@ -241,7 +241,7 @@ body {
   background: var(--color-scrollbar-thumb-hover);
 }
 
-/* File/page controls remain keyboard accessible and make disabled boundaries visible. */
+/* File controls remain keyboard accessible and make disabled boundaries visible. */
 .review-controls button:not(.diff-gutter button) {
   border-radius: 4px;
 }

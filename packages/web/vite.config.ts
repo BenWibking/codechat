@@ -8,6 +8,10 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
   },
+  // Pierre's highlight worker lazy-loads Shiki languages, which needs ES module workers.
+  worker: {
+    format: 'es',
+  },
   server: {
     proxy: {
       // Forward WebSocket connections to the CLI review server during development.
